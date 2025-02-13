@@ -3,6 +3,10 @@
 import { Pixel } from "./Pixel.js";
 import { Punto } from "./Punto.js";
 
+const PIXEL_SIZE = 10
+const WIDTH = 300
+const HEIGHT = 300
+
 function sound(src) {
     this.sound = document.createElement("audio");
     this.sound.src = src;
@@ -10,13 +14,16 @@ function sound(src) {
     this.sound.setAttribute("controls", "none");
     this.sound.style.display = "none";
     document.body.appendChild(this.sound);
+
     this.play = function () {
         this.sound.play();
     }
+
     this.stop = function () {
         this.sound.pause();
     }
 }
+
 
 class Game {
     snake = [];
@@ -24,6 +31,7 @@ class Game {
     director = null;
     direction = 2;
     canvas = null;
+    tiempoInicio = null
 
     head = new Image();
     tail = new Image();
@@ -34,10 +42,15 @@ class Game {
     isLost = false;
     detailDirection = ["", "Arriba", "Derecha", "Abajo", "Izquierda"];
 
-    constructor(txtButton, txtState, canvas) {
+    constructor(txtButton, txtState, txtTiempo, canvas) {
         this.txtButton = txtButton;
         this.txtState = txtState;
+        this.txtTiempo = txtTiempo
         this.canvas = canvas;
+        canvas.width = WIDTH
+        canvas.height = HEIGHT
+
+        this.tiempoInicio = new Date()
 
         this.ctx = this.canvas.getContext("2d");
 
@@ -45,6 +58,7 @@ class Game {
         this.cookie.src = "media/cookie.png";
         this.tail.src = "media/bola2.png";
         this.lose.src = "media/perdiste.jpg";
+
     }
 
     init() {
@@ -73,17 +87,73 @@ class Game {
             }
         });
 
-        this.director = setInterval(() => {
-            this.rules();
+        this.director = this.timeline()
+    }
+
+    rellenarDecena(numero, defaultValue="0") {
+        if (numero < 10) {
+            return defaultValue+numero
+        }
+        return numero
+    }
+    
+    formatearTiempo (milisegundos) {
+        let horas = parseInt(milisegundos / 1000 / 60 / 60)
+        milisegundos -= horas * 60 * 60 * 1000
+        let minutos = parseInt(milisegundos / 1000 / 60)
+        milisegundos -= minutos * 60 * 1000
+        let segundos = milisegundos / 1000
+        return `${this.rellenarDecena(horas)}:${this.rellenarDecena(minutos)}:${this.rellenarDecena(segundos.toFixed(0))}`
+    }    
+
+    actualizarTiempo = () => {
+        const ahora = new Date()
+        const diferencia = ahora.getTime() - this.tiempoInicio.getTime()
+        this.txtTiempo.value = this.formatearTiempo(diferencia)
+    }
+
+    timeline() {
+        let interval = setInterval(async () => {
+            this.actualizarTiempo()
+
+            this.rules();            
             if (!this.isLost) {
                 this.next();
                 this.show();
             } else {
-                clearInterval(this.director);
+                clearInterval(interval)
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                this.ctx.drawImage(this.lose, 0, 0);
+
+                if (!this.estaFueraJuego()) {
+                    await this.delay(500)
+                    interval = setInterval(()=> {
+                        const pixeles = this.snake.splice(1, 1)
+                        if (pixeles) {
+                            const { origen } = pixeles[0]
+                            this.snake[0].move(origen)
+                        }
+
+                        this.show()
+                        if (this.snake.length === 1) {
+                            clearInterval(interval)
+                            this.ctx.drawImage(this.lose, 0, 0);
+                        }
+                    }, 100)
+                } else {
+                    this.ctx.drawImage(this.lose, 0, 0);
+                }
             }
         }, 100);
+
+        return () => clearInterval(interval)
+    }
+
+    delay(time) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                resolve()
+            }, time)
+        })
     }
 
     next() {
@@ -141,40 +211,50 @@ class Game {
 
     rules() {
         //regla 1, colisión
+        const snake = this.snake
         for (let i = 1; i < this.snake.length; i++) {
-            if (this.snake[0].origen.toString() === this.snake[i].origen.toString()) {
+            if (snake[0].origen.toString() === snake[i].origen.toString()) {
                 this.isLost = true;
             }
         }
 
         //regla 2, salir de pantalla
-        if (this.estaFuera(30, 30)) {
+        if (this.estaFueraJuego()) {
             this.isLost = true;
         }
     }
 
-    estaFuera(x, y) {
-        const {origen} = this.snake[0]
-        return origen.x >= x 
-        || origen.x < 0 
-        || origen.y >= y || origen.y < 0
+    estaFueraJuego() {
+        const { origen } = this.snake[0]
+        const x = WIDTH / PIXEL_SIZE
+        const y = HEIGHT / PIXEL_SIZE
+        return origen.x >= x
+            || origen.x < 0
+            || origen.y >= y || origen.y < 0
     }
 
-    isEating() {
-        const {origen:p1} = this.snake[0]
-        const {origen:p2} = this.food
+    async isEating() {
+        const { origen: p1 } = this.snake[0]
+        const { origen: p2 } = this.food
         if (p1.toString() === p2.toString()) {
             this.food = null;
-            this.scream.play();
-            const {origenOld} = this.snake[this.snake.length - 1];
+            this.scream.play(1);
+            const { origenOld } = this.snake[this.snake.length - 1];
             this.snake.push(new Pixel(10, origenOld));
+            this.director()
+            await this.delay(1000)
+            this.director = this.timeline()
         }
     }
 
     getFood() {
-        const x = Math.floor(Math.random() * 30);
-        const y = Math.floor(Math.random() * 30);
-        this.food = new Pixel(10, new Punto(x, y));
+        let punto = null
+        do {
+            const x = Math.floor(Math.random() * 30);
+            const y = Math.floor(Math.random() * 30);
+            punto = new Punto(x, y)
+        } while(this.snake.map(p => p.origen.toString()).includes(punto.toString()))
+        this.food = new Pixel(10, punto);
     }
 
     printDirection() {
@@ -189,5 +269,6 @@ class Game {
 
 var game = new Game(document.getElementById("txtButton"),
     document.getElementById("txtState"),
+    document.getElementById("reloj"),
     document.getElementById("canvas"));
 game.init();

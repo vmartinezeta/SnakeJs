@@ -7,30 +7,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script type="module" src="snake.js" defer></script>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        input {
+            width: 100px;
+            height: 40px;
+        }
+
         body{
             display: flex;
             justify-content: center;
             align-items: center;            
         }
+
         .app {
             background: none;
             width: 320px;
-            height: 400px;
+            height: 370px;
             position: absolute;
             inset: 0;
             margin: auto;
+            padding: 10px;
+        }
+
+        .controles {
+            display: flex;
         }
     </style>
 </head>
 <body>
     <div class="app">
-
-        <canvas id="canvas" width="300" height="300" 
+        <canvas id="canvas" 
         style="border:1px solid #000; background-image:url(media/wall.jpg);"></canvas>
-        
-        <div>
-            <input id="txtButton" readonly="true" style="width:100px;" type="text" />
-            <input id="txtState" readonly="true" style="width:100px;" type="text" />
+
+        <div class="controles">
+            <input id="txtButton" readonly="true"  type="text" />
+            <input id="txtState" readonly="true" type="text" />
+            <input id="reloj" readonly type="text" value="00:00:00">
         </div>
     </div>
 </body>
