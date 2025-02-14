@@ -1,8 +1,6 @@
 /*Autor:Hector de Leon*/
 /*Refactorizado por Víctor Martinez*/
-import { Pixel } from "./Pixel.js";
-import { Punto } from "./Punto.js";
-
+import { PhysicsBody } from "./PhysicsBody.js";
 const PIXEL_SIZE = 10
 const WIDTH = 300
 const HEIGHT = 300
@@ -62,7 +60,7 @@ class Game {
     }
 
     init() {
-        this.snake.push(new Pixel(10, new Punto(15, 15)));
+        this.snake.push(new PhysicsBody(15, 15, PIXEL_SIZE, PIXEL_SIZE));
 
         document.addEventListener("keyup", (e) => {
             this.printKey(e.key);
@@ -90,21 +88,21 @@ class Game {
         this.director = this.timeline()
     }
 
-    rellenarDecena(numero, defaultValue="0") {
+    rellenarDecena(numero, defaultValue = "0") {
         if (numero < 10) {
-            return defaultValue+numero
+            return defaultValue + numero
         }
         return numero
     }
-    
-    formatearTiempo (milisegundos) {
+
+    formatearTiempo(milisegundos) {
         let horas = parseInt(milisegundos / 1000 / 60 / 60)
         milisegundos -= horas * 60 * 60 * 1000
         let minutos = parseInt(milisegundos / 1000 / 60)
         milisegundos -= minutos * 60 * 1000
         let segundos = milisegundos / 1000
         return `${this.rellenarDecena(horas)}:${this.rellenarDecena(minutos)}:${this.rellenarDecena(segundos.toFixed(0))}`
-    }    
+    }
 
     actualizarTiempo = () => {
         const ahora = new Date()
@@ -116,7 +114,7 @@ class Game {
         let interval = setInterval(async () => {
             this.actualizarTiempo()
 
-            this.rules();            
+            this.rules();
             if (!this.isLost) {
                 this.next();
                 this.show();
@@ -126,7 +124,7 @@ class Game {
 
                 if (!this.estaFueraJuego()) {
                     await this.delay(500)
-                    interval = setInterval(()=> {
+                    interval = setInterval(() => {
                         const pixeles = this.snake.splice(1, 1)
                         if (pixeles) {
                             const { origen } = pixeles[0]
@@ -184,8 +182,8 @@ class Game {
 
         this.snake.map((square, index, snake_) => {
             if (index > 0) {
-                const { origenOld } = snake_[index - 1]
-                square.move(origenOld)
+                const { x0, y0 } = snake_[index - 1]
+                square.move(x0, y0)
             }
         })
 
@@ -213,7 +211,7 @@ class Game {
         //regla 1, colisión
         const snake = this.snake
         for (let i = 1; i < this.snake.length; i++) {
-            if (snake[0].origen.toString() === snake[i].origen.toString()) {
+            if (snake[0].touching(snake[i])) {
                 this.isLost = true;
             }
         }
@@ -225,36 +223,61 @@ class Game {
     }
 
     estaFueraJuego() {
-        const { origen } = this.snake[0]
-        const x = WIDTH / PIXEL_SIZE
-        const y = HEIGHT / PIXEL_SIZE
-        return origen.x >= x
-            || origen.x < 0
-            || origen.y >= y || origen.y < 0
+        const { x, y } = this.snake[0]
+        const x1 = WIDTH / PIXEL_SIZE
+        const y1 = HEIGHT / PIXEL_SIZE
+        return x >= x1
+            || x < 0
+            || y >= y1 || y < 0
     }
 
     async isEating() {
-        const { origen: p1 } = this.snake[0]
-        const { origen: p2 } = this.food
-        if (p1.toString() === p2.toString()) {
+        const [cabeza] = this.snake
+        if (cabeza.touching(this.food)) {
             this.food = null;
-            this.scream.play(1);
-            const { origenOld } = this.snake[this.snake.length - 1];
-            this.snake.push(new Pixel(10, origenOld));
+            this.scream.play();
+            const { x0, y0 } = this.snake[this.snake.length - 1];
+            this.snake.push(new PhysicsBody(x0, y0, PIXEL_SIZE, PIXEL_SIZE));
             this.director()
-            await this.delay(1000)
+            // await this.delay(1)
             this.director = this.timeline()
         }
     }
 
-    getFood() {
-        let punto = null
-        do {
-            const x = Math.floor(Math.random() * 30);
-            const y = Math.floor(Math.random() * 30);
-            punto = new Punto(x, y)
-        } while(this.snake.map(p => p.origen.toString()).includes(punto.toString()))
-        this.food = new Pixel(10, punto);
+    collide(snake, galleta) {
+        for (const cuadro of snake) {
+            if (galleta.touching(cuadro)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    createCookie() {
+        const snake = this.snake
+        let x = Math.floor( Math.random() * 30)
+        let y = Math.floor( Math.random() * 30)
+        const galleta = new PhysicsBody(x, y, PIXEL_SIZE, PIXEL_SIZE)
+        const tiempoInicio = new Date()
+        return new Promise((resolve, reject) => {
+            while (this.collide(snake, galleta)) {
+                x = Math.floor( Math.random() * 30)
+                y = Math.floor( Math.random() * 30)
+                galleta.x = x
+                galleta.y = y
+                const hoy = new Date()
+                const tiempo = hoy - tiempoInicio
+                if (tiempo > 1000) {
+                    return reject("ERROR: Completo el mundo del juego")
+                }
+            }
+            resolve(galleta)
+        })
+    }
+
+    async getFood() {
+        const cookie = await this.createCookie()
+        this.food = cookie
     }
 
     printDirection() {
